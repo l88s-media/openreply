@@ -50,6 +50,9 @@ interface WebhookEntry {
       id?: string;
       comment_id?: string;
       text?: string;
+      // Present when the comment is a reply to another comment. Instagram only
+      // allows a private reply to a top-level comment, so a reply must be skipped.
+      parent_id?: string;
       from?: {
         id?: string;
         username?: string;
@@ -99,10 +102,18 @@ export function parseCommentEvents(payload: WebhookPayload): WebhookCommentEvent
         continue;
       }
 
-      // Skip the connected account's own comments and comment replies.
-      // A private reply to yourself is rejected by Meta, so queueing one
-      // only produces a failed log and wasted retries.
+      // Skip the connected account's own comments. A private reply to yourself
+      // is rejected by Meta, so queueing one only produces a failed log and
+      // wasted retries.
       if (commenterId === entry.id) {
+        continue;
+      }
+
+      // Skip replies to another comment. Instagram allows a private reply only
+      // to a top-level comment; a reply-to-a-reply returns Meta error 100
+      // ("The comment is invalid for a private reply"), so queueing one only
+      // produces a failed log and wasted retries.
+      if (value.parent_id) {
         continue;
       }
 
