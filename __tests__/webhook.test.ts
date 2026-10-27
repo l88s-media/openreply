@@ -269,6 +269,33 @@ describe("parseCommentEvents", () => {
     expect(events[0].commenterId).toBe("user_2");
   });
 
+  it("should ignore replies to other comments (private reply invalid)", () => {
+    const payload = {
+      object: "instagram",
+      entry: [
+        {
+          id: "page_123",
+          time: 1234567890,
+          changes: [
+            {
+              field: "comments",
+              value: {
+                id: "reply_1",
+                // Instagram prefixes an @mention when you reply in a thread.
+                text: "@someone niets ontvangen",
+                parent_id: "comment_1",
+                from: { id: "user_9", username: "user9" },
+                media: { id: "media_1" },
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(parseCommentEvents(payload)).toHaveLength(0);
+  });
+
   it("should handle entries without changes", () => {
     const payload = {
       object: "instagram",
