@@ -82,6 +82,38 @@ interface WebhookPayload {
   entry: WebhookEntry[];
 }
 
+// Facebook Page "feed" webhooks carry a differently-shaped change.value than
+// the Instagram "comments" webhooks above, so model it separately rather than
+// widening WebhookEntry.
+interface FacebookFeedChange {
+  field: string;
+  value?: {
+    item?: string;
+    verb?: string;
+    comment_id?: string;
+    post_id?: string;
+    message?: string;
+    // Set when the comment is a reply to another comment; private replies are
+    // only valid on top-level comments.
+    parent_id?: string;
+    from?: {
+      id?: string;
+      name?: string;
+    };
+  };
+}
+
+interface FacebookPageEntry {
+  id: string;
+  time?: number;
+  changes?: FacebookFeedChange[];
+}
+
+interface FacebookPagePayload {
+  object: string;
+  entry: FacebookPageEntry[];
+}
+
 export function parseCommentEvents(payload: WebhookPayload): WebhookCommentEvent[] {
   const events: WebhookCommentEvent[] = [];
 
@@ -124,6 +156,53 @@ export function parseCommentEvents(payload: WebhookPayload): WebhookCommentEvent
         commenterId,
         commenterName: value.from?.username,
         mediaId,
+      });
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Parse Facebook Page comment ("feed") webhooks into the same
+ * WebhookCommentEvent shape as the Instagram parser, so the queue and worker
+ * stay source-agnostic. Page feed events use object === "page" and
+ * entry.id = the Page id.
+ */
+export function parseFacebookCommentEvents(
+  payload: FacebookPagePayload
+): WebhookCommentEvent[] {
+  const events: WebhookCommentEvent[] = [];
+
+  if (payload.object !== "page") return events;
+
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      if (change.field !== "feed") continue;
+
+      const value = change.value;
+      if (value?.item !== "comment" || value?.verb !== "add") continue;
+
+      const commentId = value.comment_id;
+      const commenterId = value.from?.id;
+
+      if (!entry.id || !commentId || !commenterId) continue;
+
+      // Skip the Page's own comments — a private reply to yourself is rejected
+      // by Meta, so queueing one only produces a failed log and wasted retries.
+      if (commenterId === entry.id) continue;
+
+      // Skip replies to another comment — private replies are only valid on
+      // top-level comments (Meta error 100 otherwise).
+      if (value.parent_id) continue;
+
+      events.push({
+        instagramAccountId: entry.id,
+        commentId,
+        commentText: value.message ?? "",
+        commenterId,
+        commenterName: value.from?.name,
+        mediaId: value.post_id ?? "",
       });
     }
   }

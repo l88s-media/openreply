@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { verifyWebhookSignature, parseCommentEvents } from "../lib/meta/webhook";
+import {
+  verifyWebhookSignature,
+  parseCommentEvents,
+  parseFacebookCommentEvents,
+} from "../lib/meta/webhook";
 import { createHmac } from "crypto";
 
 // Mock the environment variable
@@ -309,6 +313,77 @@ describe("parseCommentEvents", () => {
     };
 
     const events = parseCommentEvents(payload);
+    expect(events).toHaveLength(0);
+  });
+});
+
+describe("parseFacebookCommentEvents", () => {
+  function pageComment(overrides = {}) {
+    return {
+      object: "page",
+      entry: [
+        {
+          id: "page_1",
+          time: 1,
+          changes: [
+            {
+              field: "feed",
+              value: {
+                item: "comment",
+                verb: "add",
+                comment_id: "c_1",
+                post_id: "post_1",
+                message: "please send link",
+                from: { id: "user_1", name: "Jane" },
+                ...overrides,
+              },
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("parses a valid page feed comment", () => {
+    const events = parseFacebookCommentEvents(pageComment() as never);
+    expect(events).toEqual([
+      {
+        instagramAccountId: "page_1",
+        commentId: "c_1",
+        commentText: "please send link",
+        commenterId: "user_1",
+        commenterName: "Jane",
+        mediaId: "post_1",
+      },
+    ]);
+  });
+
+  it("ignores non-page objects", () => {
+    const events = parseFacebookCommentEvents({
+      object: "instagram",
+      entry: [],
+    } as never);
+    expect(events).toHaveLength(0);
+  });
+
+  it("ignores non-add verbs (edits, removes)", () => {
+    const events = parseFacebookCommentEvents(
+      pageComment({ verb: "edited" }) as never
+    );
+    expect(events).toHaveLength(0);
+  });
+
+  it("ignores non-comment feed items (likes, statuses)", () => {
+    const events = parseFacebookCommentEvents(
+      pageComment({ item: "like" }) as never
+    );
+    expect(events).toHaveLength(0);
+  });
+
+  it("skips the Page's own comment", () => {
+    const events = parseFacebookCommentEvents(
+      pageComment({ from: { id: "page_1", name: "The Page" } }) as never
+    );
     expect(events).toHaveLength(0);
   });
 });
