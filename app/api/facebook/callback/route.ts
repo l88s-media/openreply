@@ -5,8 +5,9 @@ import { getBaseUrl, getMetaGraphApiVersion } from "@/lib/env";
 import { canConnectInstagramAccount } from "@/lib/instagram-accounts";
 import {
   exchangeFacebookCodeForToken,
+  getConnectedPages,
+  getFacebookLoginConfig,
   getLongLivedUserToken,
-  getUserPages,
 } from "@/lib/meta/facebook-oauth";
 import { encryptToken, verifyOAuthState } from "@/lib/meta/oauth";
 import { canManageWorkspace } from "@/lib/workspace-access";
@@ -63,11 +64,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const redirectUri = `${baseUrl}/api/facebook/callback`;
-    const { accessToken: shortLivedToken } =
+    const { accessToken: exchangedToken } =
       await exchangeFacebookCodeForToken(code, redirectUri);
-    const { accessToken: longLivedToken } =
-      await getLongLivedUserToken(shortLivedToken);
-    const pages = await getUserPages(longLivedToken);
+
+    // A System User (BISU) token from the code exchange is already long-lived,
+    // and fb_exchange_token is a user-token-only step — so only run it for the
+    // user-token config. Page tokens derived from either are non-expiring.
+    const { isSystemUser } = getFacebookLoginConfig();
+    const accountToken = isSystemUser
+      ? exchangedToken
+      : (await getLongLivedUserToken(exchangedToken)).accessToken;
+    const pages = await getConnectedPages(accountToken);
 
     if (pages.length === 0) {
       return NextResponse.redirect(`${baseUrl}/settings?facebook=no_pages`);
