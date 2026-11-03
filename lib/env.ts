@@ -43,6 +43,10 @@ export const serverEnvSchema = z.object({
   // Optional: Facebook Login for Business Configuration id. When set, the connect
   // dialog uses config_id instead of a scope list. Unset = classic scope dialog.
   FACEBOOK_LOGIN_CONFIG_ID: z.string().min(1).optional(),
+  // Optional: a *System User access token* Configuration id. When set it takes
+  // precedence over FACEBOOK_LOGIN_CONFIG_ID — the only way to connect Pages
+  // owned by a Meta Business Portfolio (New Pages Experience). See PR / README.
+  FACEBOOK_SYSTEM_USER_CONFIG_ID: z.string().min(1).optional(),
   WEBHOOK_VERIFY_TOKEN: z.string().min(1),
 });
 

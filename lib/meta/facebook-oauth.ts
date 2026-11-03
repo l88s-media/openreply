@@ -20,6 +20,29 @@ async function throwGraphError(response: Response): Promise<never> {
   );
 }
 
+// The Meta app uses the "Facebook Login for Business" product, which drives the
+// dialog from a saved Configuration (config_id) instead of a runtime scope list.
+//
+// A *User access token* config (FACEBOOK_LOGIN_CONFIG_ID) only ever yields the
+// Pages the logged-in person has a direct role on — it never returns Pages owned
+// by a Meta Business Portfolio (New Pages Experience), which is what agency
+// clients use. A *System User access token* config (FACEBOOK_SYSTEM_USER_CONFIG_ID)
+// is Meta's sanctioned path for that: the business admin grants the app's system
+// user access to portfolio Pages, and the exchanged Business Integration System
+// User (BISU) token then lists them. See PR description for the full rationale.
+//
+// Both config types use the same dialog params (config_id + code grant); the
+// token type is a property of the Configuration, not the request. System-user
+// takes precedence when set so a workspace can keep a user-token config around.
+export function getFacebookLoginConfig(): {
+  configId?: string;
+  isSystemUser: boolean;
+} {
+  const systemUser = process.env.FACEBOOK_SYSTEM_USER_CONFIG_ID;
+  if (systemUser) return { configId: systemUser, isSystemUser: true };
+  return { configId: process.env.FACEBOOK_LOGIN_CONFIG_ID, isSystemUser: false };
+}
+
 export function getFacebookAuthorizationUrl(
   redirectUri: string,
   state: string
@@ -31,14 +54,11 @@ export function getFacebookAuthorizationUrl(
     response_type: "code",
   });
 
-  // The Meta app uses the "Facebook Login for Business" product, which drives the
-  // dialog from a saved Configuration (config_id) instead of a runtime scope list.
-  // The config must be a *User access token* type bundling pages_messaging,
-  // pages_manage_metadata, pages_read_engagement (see PR description). User-token
-  // configs default to the implicit grant, so override_default_response_type=true
-  // is required to force the code grant our callback exchanges server-side.
-  // Falls back to the classic scope dialog when FACEBOOK_LOGIN_CONFIG_ID is unset.
-  const configId = process.env.FACEBOOK_LOGIN_CONFIG_ID;
+  // config_id configs default to the implicit grant, so
+  // override_default_response_type=true forces the code grant our callback
+  // exchanges server-side. Falls back to the classic scope dialog when no
+  // config id is set.
+  const { configId } = getFacebookLoginConfig();
   if (configId) {
     params.set("config_id", configId);
     params.set("override_default_response_type", "true");
@@ -88,12 +108,17 @@ export async function getLongLivedUserToken(
   };
 }
 
-export async function getUserPages(
-  userAccessToken: string
+// Lists the Pages the token can manage, each with its own Page access token.
+// Works for both token types: with a BISU (system-user) token, /me/accounts
+// returns the Business Portfolio Pages assigned to the system user plus their
+// access_token — per Meta's "On Behalf Of" business-management guide. So no
+// separate /{business-id}/owned_pages call is needed.
+export async function getConnectedPages(
+  accessToken: string
 ): Promise<Array<{ id: string; name: string; access_token: string }>> {
   const url = new URL(`${graphBase()}/me/accounts`);
   url.searchParams.set("fields", "id,name,access_token");
-  url.searchParams.set("access_token", userAccessToken);
+  url.searchParams.set("access_token", accessToken);
 
   const response = await fetch(url.toString());
   if (!response.ok) await throwGraphError(response);
