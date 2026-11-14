@@ -95,8 +95,17 @@ export default function SettingsPage() {
     if (payload.success) setMembersData(payload.data);
   }
 
-  async function disconnectInstagram(instagramAccountId: string) {
-    if (!confirm("Disconnect Instagram? Campaigns for this account will stop sending DMs.")) {
+  async function disconnectInstagram(
+    instagramAccountId: string,
+    username: string,
+    platform?: "INSTAGRAM" | "FACEBOOK"
+  ) {
+    const label = platform === "FACEBOOK" ? "Facebook" : "Instagram";
+    if (
+      !confirm(
+        `Disconnect ${label} account @${username}? Campaigns for this account will stop sending DMs.`
+      )
+    ) {
       return;
     }
 
@@ -211,8 +220,17 @@ export default function SettingsPage() {
                 className="flex flex-col gap-3 rounded border border-border bg-surface/70 p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <p className="text-sm font-semibold text-foreground">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     @{account.username}
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        account.platform === "FACEBOOK"
+                          ? "bg-blue-500/15 text-blue-400"
+                          : "bg-pink-500/15 text-pink-400"
+                      }`}
+                    >
+                      {account.platform === "FACEBOOK" ? "Facebook" : "Instagram"}
+                    </span>
                   </p>
                   <p className="mt-1 text-xs text-muted">
                     Token expires{" "}
@@ -223,7 +241,13 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <button
-                  onClick={() => disconnectInstagram(account.id)}
+                  onClick={() =>
+                    disconnectInstagram(
+                      account.id,
+                      account.username,
+                      account.platform
+                    )
+                  }
                   disabled={busy === `disconnect:${account.id}`}
                   className="inline-flex items-center justify-center rounded border border-error/20 px-4 py-2 text-sm font-medium text-error transition-all hover:border-error/40 hover:bg-error/10 disabled:opacity-50"
                 >
