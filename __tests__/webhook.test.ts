@@ -388,6 +388,22 @@ describe("parseFacebookCommentEvents", () => {
     );
     expect(events).toHaveLength(0);
   });
+
+  it("parses a top-level comment whose parent_id equals the post_id", () => {
+    // Facebook sets a top-level comment's parent_id to the post_id. This must
+    // NOT be treated as a reply, or every real page comment is dropped.
+    const events = parseFacebookCommentEvents(
+      pageComment({ parent_id: "post_1" }) as never
+    );
+    expect(events).toHaveLength(1);
+  });
+
+  it("skips a reply to another comment (parent_id differs from post_id)", () => {
+    const events = parseFacebookCommentEvents(
+      pageComment({ parent_id: "c_parent" }) as never
+    );
+    expect(events).toHaveLength(0);
+  });
 });
 
 describe("parseMessageEvents", () => {
