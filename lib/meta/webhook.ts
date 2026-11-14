@@ -227,11 +227,16 @@ export function parseFacebookCommentEvents(
       if (commenterId === entry.id) continue;
 
       // Skip replies to another comment — private replies are only valid on
-      // top-level comments (Meta error 100 otherwise). On Facebook Pages a
-      // top-level comment's parent_id equals the post_id; only a reply to
-      // another comment carries a different parent_id. Instagram omits
-      // parent_id for top-level comments, so the equality check is skipped there.
-      if (value.parent_id && value.parent_id !== value.post_id) continue;
+      // top-level comments (Meta error 100 otherwise). A reply's parent_id is
+      // the parent COMMENT, which shares this comment's post-object prefix (the
+      // part before "_"). A top-level comment's parent_id is the post itself —
+      // the page id for a simple post, or the album id for a photo — whose
+      // prefix differs. (parent_id === post_id only holds for reels/simple
+      // posts, not album photos.) Instagram omits parent_id on top-level
+      // comments, so this never fires there.
+      const parentPrefix = value.parent_id?.split("_")[0];
+      const commentPrefix = commentId.split("_")[0];
+      if (parentPrefix && parentPrefix === commentPrefix) continue;
 
       events.push({
         instagramAccountId: entry.id,

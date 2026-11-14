@@ -389,18 +389,32 @@ describe("parseFacebookCommentEvents", () => {
     expect(events).toHaveLength(0);
   });
 
-  it("parses a top-level comment whose parent_id equals the post_id", () => {
-    // Facebook sets a top-level comment's parent_id to the post_id. This must
-    // NOT be treated as a reply, or every real page comment is dropped.
+  it("parses a top-level comment whose parent_id is the post_id (reel/simple post)", () => {
     const events = parseFacebookCommentEvents(
       pageComment({ parent_id: "post_1" }) as never
     );
     expect(events).toHaveLength(1);
   });
 
-  it("skips a reply to another comment (parent_id differs from post_id)", () => {
+  it("parses a top-level comment on an album photo (parent_id is the album, not the photo)", () => {
+    // Real Facebook album-photo shape: post_id is the photo, parent_id is the
+    // album post — different prefix from the comment, so NOT a reply.
     const events = parseFacebookCommentEvents(
-      pageComment({ parent_id: "c_parent" }) as never
+      pageComment({
+        comment_id: "122118986595292310_4523966137850761",
+        post_id: "995510200323459_122118986595292310",
+        parent_id: "28628479530086129_122118986631292310",
+      }) as never
+    );
+    expect(events).toHaveLength(1);
+  });
+
+  it("skips a reply to another comment (parent shares the comment's post-object prefix)", () => {
+    const events = parseFacebookCommentEvents(
+      pageComment({
+        comment_id: "post_1_reply99",
+        parent_id: "post_1_comment42",
+      }) as never
     );
     expect(events).toHaveLength(0);
   });
